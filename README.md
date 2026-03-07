@@ -17,13 +17,16 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 - Sıralama: `severity / score / confidence`
 - 3 sekme:
   - Genel Bakış (KPI + donut + bar + sentiment trend line chart)
-  - İçgörüler (aksiyon gruplu kartlar + participant drill-down drawer)
+  - İçgörüler (aksiyon gruplu kartlar + participant drill-down drawer + öncelik skoru)
   - Temalar (radar + horizontal bar + tema kartları)
 - Escalate uyarı banner'ı
 - CSV veri yükleme (`public/data.csv`)
 - Filtrelenmiş veriyi CSV olarak dışa aktarma
 - Dark/Light tema toggle (CSS variable token sistemi)
 - Mobil/tablet responsive düzen + hamburger menü
+- Focus Mode filtreleri (`Tum / Kritik / Negatif / Dusuk Guven`)
+- Veri kalite paneli (eksik tarih, belirsiz aksiyon/sentiment, düşük güven)
+- Riskli katılımcı listesi ve hızlı drill-down
 
 ## Proje Yapısı
 ```text

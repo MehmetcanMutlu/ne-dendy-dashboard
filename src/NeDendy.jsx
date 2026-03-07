@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
 import {
   PieChart,
@@ -146,6 +146,21 @@ const ACTION_LABELS = {
   unknown: "Unknown",
 };
 
+const ACTION_PRIORITY_WEIGHT = {
+  escalate: 1,
+  follow_up: 0.8,
+  watch: 0.55,
+  ignore: 0.1,
+  unknown: 0.25,
+};
+
+const FOCUS_MODES = {
+  all: "Tum Kayitlar",
+  critical: "Kritik",
+  negative: "Negatif",
+  low_confidence: "Dusuk Guven",
+};
+
 function toThemeVars(mode) {
   const values = THEME_VARS[mode] || THEME_VARS.dark;
   return {
@@ -260,6 +275,10 @@ function formatDateTime(dateValue) {
 
 function formatDateKey(dateValue) {
   return dateValue.toISOString().slice(0, 10);
+}
+
+function clamp01(value) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function startOfWeek(dateValue) {
@@ -472,6 +491,9 @@ function InsightCard({ item, index, onParticipantClick }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <ScoreBar value={item.score} />
+        <span style={{ fontSize: 11, color: C.accent, fontWeight: 700 }}>
+          Oncelik {Math.round(item.priorityScore * 100)}%
+        </span>
         {item.themes.slice(0, 3).map((theme) => (
           <span
             key={`${item.label_id}-${theme}`}
@@ -567,11 +589,44 @@ function Section({ title, subtitle, color, items, onParticipantClick, collapsed 
   );
 }
 
-function OverviewTab({ stats, trendData, trendMode, onTrendModeChange }) {
-  const { total, avgScore, sentCounts, actionCounts, topThemes, urgentCount, riskScore, sentPie, actionBar } = stats;
+function OverviewTab({
+  stats,
+  trendData,
+  trendMode,
+  onTrendModeChange,
+  focusMode,
+  onFocusModeChange,
+  topParticipants,
+  dataQuality,
+  onParticipantClick,
+}) {
+  const { total, avgScore, avgPriority, sentCounts, actionCounts, topThemes, urgentCount, riskScore, sentPie, actionBar } = stats;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div className="panel" style={{ padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ color: C.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
+            Focus Mode
+          </span>
+          {Object.entries(FOCUS_MODES).map(([mode, label]) => (
+            <button
+              type="button"
+              key={mode}
+              onClick={() => onFocusModeChange(mode)}
+              className="chip-btn"
+              style={{
+                borderColor: focusMode === mode ? C.accent : C.border,
+                background: focusMode === mode ? C.accentSoft : "transparent",
+                color: focusMode === mode ? C.accent : C.textMuted,
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <div className="kpi-grid">
         <StatCard label="Toplam Yanit" value={total.toLocaleString()} icon="📋" accent={C.accent} />
         <StatCard
@@ -601,6 +656,13 @@ function OverviewTab({ stats, trendData, trendMode, onTrendModeChange }) {
           sub="severity x confidence"
           icon="🧭"
           accent={riskScore > 0.45 ? C.escalate : riskScore > 0.3 ? C.watch : C.positive}
+        />
+        <StatCard
+          label="Oncelik Skoru"
+          value={formatPct(avgPriority * 100)}
+          sub="severity + confidence + sentiment + action"
+          icon="🎯"
+          accent={avgPriority > 0.62 ? C.escalate : avgPriority > 0.45 ? C.watch : C.positive}
         />
       </div>
 
@@ -760,6 +822,49 @@ function OverviewTab({ stats, trendData, trendMode, onTrendModeChange }) {
               <span style={{ color: C.accent, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{theme.count}</span>
             </div>
           ))}
+        </div>
+      </div>
+
+      <div className="chart-grid">
+        <div className="panel">
+          <div className="panel-title">En Riskli Katilimcilar</div>
+          {topParticipants.length ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {topParticipants.map((row) => (
+                <button
+                  type="button"
+                  key={row.participantId}
+                  onClick={() => onParticipantClick(row.participantId)}
+                  className="participant-row"
+                >
+                  <span style={{ color: C.text, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>#{row.participantId}</span>
+                  <span style={{ color: C.textMuted, fontSize: 11 }}>{row.total} yanit</span>
+                  <span style={{ color: C.escalate, fontSize: 11, fontWeight: 700 }}>
+                    {row.escalateCount ? `${row.escalateCount} escalate` : "escalate yok"}
+                  </span>
+                  <span style={{ marginLeft: "auto", color: C.accent, fontWeight: 800, fontSize: 12 }}>
+                    {formatPct(row.avgPriority * 100)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-box" style={{ minHeight: 120 }}>
+              Katilimci riski olusturulamadi.
+            </div>
+          )}
+        </div>
+
+        <div className="panel">
+          <div className="panel-title">Veri Kalitesi</div>
+          <div className="quality-grid">
+            <Pill label="Tarih Eksik" value={dataQuality.missingDate} color={C.watch} />
+            <Pill label="Sentiment Belirsiz" value={dataQuality.unknownSentiment} color={C.neutral} />
+            <Pill label="Aksiyon Belirsiz" value={dataQuality.unknownAction} color={C.neutral} />
+            <Pill label="Tema Eksik" value={dataQuality.missingTheme} color={C.watch} />
+            <Pill label="Dusuk Guven (<70%)" value={dataQuality.lowConfidence} color={C.escalate} />
+            <Pill label="Gorunmeyen Kayit" value={dataQuality.hiddenRows} color={C.textDim} />
+          </div>
         </div>
       </div>
     </div>
@@ -991,6 +1096,7 @@ function ParticipantDrawer({ participantId, rows, onClose }) {
                 <span>Skor: <b style={{ color: C.text }}>{Math.round(row.score * 100)}%</b></span>
                 <span>Severity: <b style={{ color: C.text }}>{Math.round(row.severity * 100)}%</b></span>
                 <span>Confidence: <b style={{ color: C.text }}>{Math.round(row.confidence * 100)}%</b></span>
+                <span>Oncelik: <b style={{ color: C.accent }}>{Math.round(row.priorityScore * 100)}%</b></span>
                 <span>{formatDateTime(row.evaluatedDate)}</span>
               </div>
 
@@ -1020,8 +1126,11 @@ export default function NeDendy() {
   const [actionFilter, setActionFilter] = useState("all");
   const [sentimentFilter, setSentimentFilter] = useState("all");
   const [searchQuery, setSearchQuery] = useState("");
+  const deferredSearchQuery = useDeferredValue(searchQuery);
   const [sortBy, setSortBy] = useState("severity");
+  const [focusMode, setFocusMode] = useState("all");
   const [activeTab, setActiveTab] = useState("overview");
+  const searchInputRef = useRef(null);
 
   const [theme, setTheme] = useState(() => localStorage.getItem("ne-dendy-theme") || "dark");
   const [isMobile, setIsMobile] = useState(() => (typeof window !== "undefined" ? window.innerWidth <= 768 : false));
@@ -1060,6 +1169,20 @@ export default function NeDendy() {
   }, [activeParticipant]);
 
   useEffect(() => {
+    function handleKey(event) {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+      }
+      if (event.altKey && event.key === "1") setActiveTab("overview");
+      if (event.altKey && event.key === "2") setActiveTab("insights");
+      if (event.altKey && event.key === "3") setActiveTab("themes");
+    }
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
+  useEffect(() => {
     Papa.parse(CSV_URL, {
       header: true,
       download: true,
@@ -1068,24 +1191,39 @@ export default function NeDendy() {
         try {
           const parsedRows = data.map((row) => {
             const payload = parseObject(row.label_payload);
-
-            const themes = parseArray(row.themes).length
-              ? parseArray(row.themes)
-              : parseArray(payload.themes);
+            const rowThemes = parseArray(row.themes);
+            const payloadThemes = parseArray(payload.themes);
+            const rowRiskFlags = parseArray(row.risk_flags);
+            const payloadRiskFlags = parseArray(payload.risk_flags);
+            const themes = rowThemes.length ? rowThemes : payloadThemes;
 
             const normalizedAction = normalizeAction(row.action || payload.action);
             const normalizedSentiment = normalizeSentiment(row.sentiment);
             const evaluatedDate = parseDateValue(row.evaluated_at || row.labeled_at || row.created_at);
+            const scoreValue = toNumber(row.score);
+            const severityValue = toNumber(row.severity, toNumber(payload.severity));
+            const confidenceValue = toNumber(row.confidence, toNumber(payload.confidence));
+
+            const sentimentPenalty = normalizedSentiment === "negative" ? 0.25 : normalizedSentiment === "neutral" ? 0.12 : 0.02;
+            const actionWeight = ACTION_PRIORITY_WEIGHT[normalizedAction] ?? ACTION_PRIORITY_WEIGHT.unknown;
+            const priorityScore = clamp01(
+              severityValue * 0.42 +
+                (1 - scoreValue) * 0.24 +
+                confidenceValue * 0.18 +
+                sentimentPenalty * 0.1 +
+                actionWeight * 0.16,
+            );
 
             return {
               ...row,
-              score: toNumber(row.score),
-              severity: toNumber(row.severity, toNumber(payload.severity)),
-              confidence: toNumber(row.confidence, toNumber(payload.confidence)),
+              score: scoreValue,
+              severity: severityValue,
+              confidence: confidenceValue,
+              priorityScore,
               action: normalizedAction,
               sentiment: normalizedSentiment,
               themes,
-              risk_flags: parseArray(row.risk_flags).length ? parseArray(row.risk_flags) : parseArray(payload.risk_flags),
+              risk_flags: rowRiskFlags.length ? rowRiskFlags : payloadRiskFlags,
               tags: parseArray(row.tags),
               should_display: toBool(row.should_display) || toBool(payload.should_display),
               display_label: (row.display_label || payload.display_label || "").trim(),
@@ -1118,18 +1256,21 @@ export default function NeDendy() {
   }, [allData]);
 
   const filteredData = useMemo(() => {
-    const query = searchQuery.trim().toLowerCase();
+    const query = deferredSearchQuery.trim().toLowerCase();
 
     return allData.filter((row) => {
       if (selectedSurvey !== "all" && row.survey_id !== selectedSurvey) return false;
       if (actionFilter !== "all" && row.action !== actionFilter) return false;
       if (sentimentFilter !== "all" && row.sentiment !== sentimentFilter) return false;
+      if (focusMode === "critical" && !(row.priorityScore >= 0.68 || row.action === "escalate")) return false;
+      if (focusMode === "negative" && row.sentiment !== "negative") return false;
+      if (focusMode === "low_confidence" && row.confidence >= 0.7) return false;
       if (!query) return true;
 
-      const text = `${row.display_label} ${row.display_note} ${row.summary} ${row.participant_id}`.toLowerCase();
+      const text = `${row.display_label} ${row.display_note} ${row.summary} ${row.participant_id} ${row.themes.join(" ")} ${row.action} ${row.sentiment}`.toLowerCase();
       return text.includes(query);
     });
-  }, [allData, selectedSurvey, actionFilter, sentimentFilter, searchQuery]);
+  }, [allData, selectedSurvey, actionFilter, sentimentFilter, deferredSearchQuery, focusMode]);
 
   const displayData = useMemo(() => {
     const list = filteredData
@@ -1139,6 +1280,7 @@ export default function NeDendy() {
     list.sort((a, b) => {
       if (sortBy === "score") return b.score - a.score;
       if (sortBy === "confidence") return b.confidence - a.confidence;
+      if (sortBy === "priority") return b.priorityScore - a.priorityScore;
       return b.severity - a.severity;
     });
 
@@ -1152,6 +1294,8 @@ export default function NeDendy() {
 
     let scoreSum = 0;
     let scoreCount = 0;
+    let prioritySum = 0;
+    let priorityCount = 0;
     let riskAccumulator = 0;
     let riskCount = 0;
 
@@ -1163,6 +1307,8 @@ export default function NeDendy() {
         scoreSum += row.score;
         scoreCount += 1;
       }
+      prioritySum += row.priorityScore;
+      priorityCount += 1;
 
       if (row.action !== "ignore") {
         riskAccumulator += row.severity * row.confidence;
@@ -1193,6 +1339,7 @@ export default function NeDendy() {
     return {
       total: filteredData.length,
       avgScore: scoreCount ? scoreSum / scoreCount : 0,
+      avgPriority: priorityCount ? prioritySum / priorityCount : 0,
       sentCounts: sentimentCounts,
       actionCounts,
       sentPie,
@@ -1240,6 +1387,56 @@ export default function NeDendy() {
       }));
   }, [filteredData, trendMode]);
 
+  const topParticipants = useMemo(() => {
+    const byParticipant = new Map();
+    filteredData.forEach((row) => {
+      if (!row.participant_id) return;
+      if (!byParticipant.has(row.participant_id)) {
+        byParticipant.set(row.participant_id, {
+          participantId: row.participant_id,
+          total: 0,
+          escalateCount: 0,
+          prioritySum: 0,
+        });
+      }
+      const participant = byParticipant.get(row.participant_id);
+      participant.total += 1;
+      participant.prioritySum += row.priorityScore;
+      if (row.action === "escalate") participant.escalateCount += 1;
+    });
+
+    return [...byParticipant.values()]
+      .map((item) => ({
+        ...item,
+        avgPriority: item.total ? item.prioritySum / item.total : 0,
+      }))
+      .sort((a, b) => {
+        if (b.avgPriority !== a.avgPriority) return b.avgPriority - a.avgPriority;
+        return b.escalateCount - a.escalateCount;
+      })
+      .slice(0, 8);
+  }, [filteredData]);
+
+  const dataQuality = useMemo(() => {
+    let missingDate = 0;
+    let unknownSentiment = 0;
+    let unknownAction = 0;
+    let missingTheme = 0;
+    let lowConfidence = 0;
+    let hiddenRows = 0;
+
+    filteredData.forEach((row) => {
+      if (!row.evaluatedDate) missingDate += 1;
+      if (row.sentiment === "unknown") unknownSentiment += 1;
+      if (row.action === "unknown") unknownAction += 1;
+      if (!row.themes.length) missingTheme += 1;
+      if (row.confidence < 0.7) lowConfidence += 1;
+      if (!row.should_display) hiddenRows += 1;
+    });
+
+    return { missingDate, unknownSentiment, unknownAction, missingTheme, lowConfidence, hiddenRows };
+  }, [filteredData]);
+
   const participantRows = useMemo(() => {
     if (!activeParticipant) return [];
     return allData
@@ -1263,6 +1460,7 @@ export default function NeDendy() {
       action: row.action,
       severity: row.severity,
       confidence: row.confidence,
+      priority_score: row.priorityScore,
       themes: JSON.stringify(row.themes),
       display_label: row.display_label,
       display_note: row.display_note,
@@ -1280,6 +1478,7 @@ export default function NeDendy() {
       "action",
       "severity",
       "confidence",
+      "priority_score",
       "themes",
       "display_label",
       "display_note",
@@ -1295,6 +1494,7 @@ export default function NeDendy() {
     setActionFilter("all");
     setSentimentFilter("all");
     setSearchQuery("");
+    setFocusMode("all");
     setSortBy("severity");
   }
 
@@ -1335,6 +1535,7 @@ export default function NeDendy() {
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", justifyContent: "flex-end" }}>
           <div className="header-badge">{allData.length.toLocaleString()} kayit</div>
           <div className="header-badge">{surveyIds.length} anket</div>
+          <div className="header-badge">Focus: {FOCUS_MODES[focusMode]}</div>
 
           <button type="button" className="ghost-btn" onClick={handleExport}>
             Disa Aktar
@@ -1390,21 +1591,33 @@ export default function NeDendy() {
           </select>
         </div>
 
+        <div className="control-item">
+          <label className="control-label">Focus Mode</label>
+          <select value={focusMode} onChange={(event) => setFocusMode(event.target.value)} className="control-input">
+            {Object.entries(FOCUS_MODES).map(([mode, label]) => (
+              <option key={mode} value={mode}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </div>
+
         <div className="control-item control-search">
           <label className="control-label">Arama</label>
           <input
+            ref={searchInputRef}
             type="text"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
             className="control-input"
-            placeholder="Etiket, not veya katilimci ara"
+            placeholder="Etiket, not veya katilimci ara (Ctrl/Cmd+K)"
           />
         </div>
 
         <div className="control-item control-sort">
           <label className="control-label">Siralama</label>
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-            {["severity", "score", "confidence"].map((key) => (
+            {["priority", "severity", "score", "confidence"].map((key) => (
               <button
                 type="button"
                 key={key}
@@ -1416,7 +1629,7 @@ export default function NeDendy() {
                   background: sortBy === key ? C.accentSoft : "transparent",
                 }}
               >
-                {key === "severity" ? "Onem" : key === "score" ? "Skor" : "Guven"}
+                {key === "priority" ? "Oncelik" : key === "severity" ? "Onem" : key === "score" ? "Skor" : "Guven"}
               </button>
             ))}
           </div>
@@ -1457,6 +1670,11 @@ export default function NeDendy() {
             trendData={trendData}
             trendMode={trendMode}
             onTrendModeChange={setTrendMode}
+            focusMode={focusMode}
+            onFocusModeChange={setFocusMode}
+            topParticipants={topParticipants}
+            dataQuality={dataQuality}
+            onParticipantClick={(participantId) => setActiveParticipant(participantId)}
           />
         ) : null}
 
@@ -1498,6 +1716,21 @@ function DashboardStyle() {
         min-height: 100vh;
         font-family: 'DM Sans', sans-serif;
         transition: background-color 220ms ease, color 220ms ease;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      .nd-app::before {
+        content: "";
+        position: fixed;
+        inset: -20% -10% auto;
+        height: 520px;
+        pointer-events: none;
+        z-index: 0;
+        background:
+          radial-gradient(circle at 14% 20%, color-mix(in srgb, var(--accent) 22%, transparent) 0%, transparent 46%),
+          radial-gradient(circle at 86% 8%, color-mix(in srgb, var(--positive) 20%, transparent) 0%, transparent 42%),
+          radial-gradient(circle at 52% 48%, color-mix(in srgb, var(--neutral) 14%, transparent) 0%, transparent 58%);
       }
 
       .nd-header {
@@ -1512,6 +1745,7 @@ function DashboardStyle() {
         z-index: 30;
         backdrop-filter: blur(12px);
         background: color-mix(in srgb, var(--bg) 88%, transparent);
+        z-index: 40;
       }
 
       .logo-badge {
@@ -1642,6 +1876,8 @@ function DashboardStyle() {
         width: 100%;
         margin: 0 auto;
         padding: 24px;
+        position: relative;
+        z-index: 2;
       }
 
       .nd-footer {
@@ -1683,6 +1919,12 @@ function DashboardStyle() {
         border-radius: 16px;
         padding: 20px;
         box-shadow: 0 8px 28px var(--shadow);
+        transition: transform 160ms ease, border-color 160ms ease;
+      }
+
+      .panel:hover {
+        transform: translateY(-1px);
+        border-color: var(--border-hover);
       }
 
       .panel-title {
@@ -1700,6 +1942,29 @@ function DashboardStyle() {
       }
 
       .theme-card:hover {
+        border-color: var(--accent);
+      }
+
+      .quality-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+      }
+
+      .participant-row {
+        border: 1px solid var(--border);
+        background: var(--surface-alt);
+        border-radius: 10px;
+        padding: 8px 10px;
+        color: var(--text);
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        cursor: pointer;
+        font-family: inherit;
+      }
+
+      .participant-row:hover {
         border-color: var(--accent);
       }
 
@@ -1850,6 +2115,10 @@ function DashboardStyle() {
         }
 
         .theme-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .quality-grid {
           grid-template-columns: 1fr;
         }
 
