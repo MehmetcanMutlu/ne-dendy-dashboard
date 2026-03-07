@@ -9,12 +9,20 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 - DM Sans + DM Mono
 - CSS-in-JS token yaklaşımı (Tailwind yok)
 
+## Teknik Tercihler ve Nedenleri
+- React 18: veri odakli dashboardlarda state/composition yonetimini sade ve izlenebilir tutuyor.
+- Vite: hizli HMR ve kisa build suresi ile iterasyonu hizlandiriyor.
+- PapaParse: istemci tarafinda guvenilir CSV parse; buyuk dosyada da stabil.
+- Recharts: React ile dogrudan uyumlu; ozellikle dashboard chart setleri hizli gelistiriliyor.
+- CSS variables + token yapisi: dark/light tema ve tasarim tutarliligini tek merkezden yonetiyor.
+- Moduler yapi: `src/dashboard/config.js`, `src/dashboard/utils.js`, `src/dashboard/primitives.jsx` ile sorumluluklar ayrildi.
+
 ## Özellikler
 - `survey_id` bazlı anket filtreleme
 - `action` filtreleme: `escalate / follow_up / watch / ignore`
 - `sentiment` filtreleme: `positive / neutral / negative`
 - Metin arama
-- Sıralama: `severity / score / confidence`
+- Sıralama: `priority / severity / score / confidence`
 - 3 sekme:
   - Genel Bakış (KPI + donut + bar + sentiment trend line chart)
   - İçgörüler (aksiyon gruplu kartlar + participant drill-down drawer + öncelik skoru)
@@ -39,6 +47,10 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 ├── src/
 │   ├── App.jsx
 │   ├── NeDendy.jsx
+│   ├── dashboard/
+│   │   ├── config.js
+│   │   ├── primitives.jsx
+│   │   └── utils.js
 │   ├── index.css
 │   └── main.jsx
 ├── index.html
@@ -59,6 +71,19 @@ npm run build
 npm run preview
 ```
 
+## CI Pipeline
+GitHub Actions pipeline'i eklendi: [`.github/workflows/ci.yml`](./.github/workflows/ci.yml)
+
+Calistirdigi adimlar:
+1. `npm ci`
+2. `npm run lint`
+3. `npm run build`
+
+Trigger:
+- `push` (`main` ve `feature/**`)
+- `pull_request`
+- `workflow_dispatch`
+
 ## Tasarım Token'ları
 - `bg: #0a0c10`
 - `surface: #111318`
@@ -72,6 +97,11 @@ npm run preview
 - `followUp: #a78bfa`
 - `text: #e2e8f0`
 - `muted: #64748b`
+
+## Zaman Kisitina Gore Sonraki Iyilestirmeler
+- Chart bundle boyutunu azaltmak icin code-splitting ve lazy chart yukleme.
+- E2E test (Playwright) ve smoke test katmani.
+- Daha detayli accessiblity turu (klavye/focus/screen reader audit).
 
 ## GitHub (Public) Yayınlama
 Aşağıdaki komutlarla public repo açıp push edebilirsin:
