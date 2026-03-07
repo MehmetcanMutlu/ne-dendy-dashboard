@@ -16,11 +16,14 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 - Metin arama
 - Sıralama: `severity / score / confidence`
 - 3 sekme:
-  - Genel Bakış (KPI + donut + bar)
-  - İçgörüler (aksiyon gruplu kartlar)
+  - Genel Bakış (KPI + donut + bar + sentiment trend line chart)
+  - İçgörüler (aksiyon gruplu kartlar + participant drill-down drawer)
   - Temalar (radar + horizontal bar + tema kartları)
 - Escalate uyarı banner'ı
 - CSV veri yükleme (`public/data.csv`)
+- Filtrelenmiş veriyi CSV olarak dışa aktarma
+- Dark/Light tema toggle (CSS variable token sistemi)
+- Mobil/tablet responsive düzen + hamburger menü
 
 ## Proje Yapısı
 ```text
