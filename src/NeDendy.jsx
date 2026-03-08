@@ -1,24 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, lazy, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import Papa from "papaparse";
-import {
-  PieChart,
-  Pie,
-  Cell,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  RadarChart,
-  Radar,
-  PolarGrid,
-  PolarAngleAxis,
-  LineChart,
-  Line,
-  Legend,
-} from "recharts";
 import {
   ACTION_COLORS,
   ACTION_LABELS,
@@ -30,15 +11,13 @@ import {
   SENTIMENT_LABELS,
   THEME_LABELS,
   THEME_VARS,
-  TREND_LABELS,
 } from "./dashboard/config";
-import { Badge, CustomTooltip, Pill, ScoreBar, StatCard } from "./dashboard/primitives";
+import { Badge, ScoreBar } from "./dashboard/primitives";
 import {
   clamp01,
   downloadCsv,
   formatDateKey,
   formatDateTime,
-  formatPct,
   formatSurveyId,
   normalizeAction,
   normalizeSentiment,
@@ -50,6 +29,9 @@ import {
   toNumber,
   toThemeVars,
 } from "./dashboard/utils";
+
+const OverviewTab = lazy(() => import("./dashboard/components/OverviewTab"));
+const ThemesTab = lazy(() => import("./dashboard/components/ThemesTab"));
 
 function InsightCard({ item, index, onParticipantClick }) {
   const actionColor = ACTION_COLORS[item.action] || C.textDim;
@@ -187,288 +169,6 @@ function Section({ title, subtitle, color, items, onParticipantClick, collapsed 
   );
 }
 
-function OverviewTab({
-  stats,
-  trendData,
-  trendMode,
-  onTrendModeChange,
-  focusMode,
-  onFocusModeChange,
-  topParticipants,
-  dataQuality,
-  onParticipantClick,
-}) {
-  const { total, avgScore, avgPriority, sentCounts, actionCounts, topThemes, urgentCount, riskScore, sentPie, actionBar } = stats;
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div className="panel" style={{ padding: 14 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-          <span style={{ color: C.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
-            Focus Mode
-          </span>
-          {Object.entries(FOCUS_MODES).map(([mode, label]) => (
-            <button
-              type="button"
-              key={mode}
-              onClick={() => onFocusModeChange(mode)}
-              className="chip-btn"
-              style={{
-                borderColor: focusMode === mode ? C.accent : C.border,
-                background: focusMode === mode ? C.accentSoft : "transparent",
-                color: focusMode === mode ? C.accent : C.textMuted,
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="kpi-grid">
-        <StatCard label="Toplam Yanit" value={total.toLocaleString()} icon="📋" accent={C.accent} />
-        <StatCard
-          label="Ort. Skor"
-          value={formatPct(avgScore * 100)}
-          sub="Tum yanitlar"
-          icon="📈"
-          accent={avgScore > 0.6 ? C.positive : avgScore > 0.4 ? C.neutral : C.negative}
-        />
-        <StatCard
-          label="Pozitif"
-          value={(sentCounts.positive || 0).toLocaleString()}
-          sub={`${total ? Math.round(((sentCounts.positive || 0) / total) * 100) : 0}% pay`}
-          icon="✅"
-          accent={C.positive}
-        />
-        <StatCard
-          label="Aksiyonluk"
-          value={urgentCount.toLocaleString()}
-          sub="watch + follow_up + escalate"
-          icon="⚠️"
-          accent={C.watch}
-        />
-        <StatCard
-          label="Risk Endeksi"
-          value={formatPct(riskScore * 100)}
-          sub="severity x confidence"
-          icon="🧭"
-          accent={riskScore > 0.45 ? C.escalate : riskScore > 0.3 ? C.watch : C.positive}
-        />
-        <StatCard
-          label="Oncelik Skoru"
-          value={formatPct(avgPriority * 100)}
-          sub="severity + confidence + sentiment + action"
-          icon="🎯"
-          accent={avgPriority > 0.62 ? C.escalate : avgPriority > 0.45 ? C.watch : C.positive}
-        />
-      </div>
-
-      <div className="chart-grid">
-        <div className="panel">
-          <div className="panel-title">Duygu Dagilimi</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 18 }}>
-            <ResponsiveContainer width={180} height={180}>
-              <PieChart>
-                <Pie data={sentPie} dataKey="value" cx="50%" cy="50%" innerRadius={52} outerRadius={80} paddingAngle={3}>
-                  {sentPie.map((entry) => (
-                    <Cell key={entry.name} fill={SENTIMENT_COLORS[entry.name]} stroke="transparent" />
-                  ))}
-                </Pie>
-                <Tooltip content={<CustomTooltip />} />
-              </PieChart>
-            </ResponsiveContainer>
-            <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-              {sentPie.map((entry) => (
-                <Pill
-                  key={entry.name}
-                  label={SENTIMENT_LABELS[entry.name]}
-                  value={entry.value}
-                  color={SENTIMENT_COLORS[entry.name]}
-                />
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Aksiyon Dagilimi</div>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={actionBar} margin={{ left: -10, right: 8 }}>
-              <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="name" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="value" radius={[6, 6, 0, 0]} name="Adet">
-                {actionBar.map((entry) => (
-                  <Cell key={entry.name} fill={ACTION_COLORS[entry.raw]} />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
-          <div className="panel-title" style={{ marginBottom: 0 }}>
-            Sentiment Trendi ({TREND_LABELS[trendMode]})
-          </div>
-          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
-            {Object.keys(TREND_LABELS).map((mode) => (
-              <button
-                type="button"
-                key={mode}
-                onClick={() => onTrendModeChange(mode)}
-                style={{
-                  padding: "6px 10px",
-                  borderRadius: 8,
-                  border: `1px solid ${trendMode === mode ? C.accent : C.border}`,
-                  background: trendMode === mode ? C.accentSoft : "transparent",
-                  color: trendMode === mode ? C.accent : C.textMuted,
-                  fontFamily: "inherit",
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                {TREND_LABELS[mode]}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {trendData.length ? (
-          <ResponsiveContainer width="100%" height={260}>
-            <LineChart data={trendData} margin={{ left: 0, right: 10, top: 8 }}>
-              <CartesianGrid stroke={C.border} strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="label" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                tick={{ fill: C.textMuted, fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                domain={[0, 100]}
-                tickFormatter={(v) => `${v}%`}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-              <Line type="monotone" dataKey="positive" name="Pozitif %" stroke={C.positive} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="neutral" name="Notr %" stroke={C.neutral} strokeWidth={2} dot={false} />
-              <Line type="monotone" dataKey="negative" name="Negatif %" stroke={C.negative} strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <div className="empty-box">Trend olusturmak icin tarih verisi bulunamadi.</div>
-        )}
-      </div>
-
-      {actionCounts.escalate > 0 ? (
-        <div
-          style={{
-            background: `${C.escalate}12`,
-            border: `1px solid ${C.escalate}4d`,
-            borderRadius: 14,
-            padding: "16px 18px",
-            display: "flex",
-            gap: 14,
-            alignItems: "center",
-          }}
-        >
-          <div
-            style={{
-              width: 38,
-              height: 38,
-              borderRadius: 10,
-              display: "grid",
-              placeItems: "center",
-              background: `${C.escalate}22`,
-              fontSize: 17,
-            }}
-          >
-            🚨
-          </div>
-          <div>
-            <div style={{ color: C.escalate, fontWeight: 800, fontSize: 14 }}>
-              {actionCounts.escalate} kayit escalate durumunda
-            </div>
-            <div style={{ color: C.textMuted, fontSize: 12, marginTop: 3 }}>
-              Bu kayitlar hizli inceleme gerektiriyor. Icgoruler sekmesinden katilimci detayina gec.
-            </div>
-          </div>
-        </div>
-      ) : null}
-
-      <div className="panel">
-        <div className="panel-title">On Plana Cikan Temalar</div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {topThemes.slice(0, 8).map((theme) => (
-            <div
-              key={theme.name}
-              style={{
-                border: `1px solid ${C.border}`,
-                background: C.surfaceAlt,
-                color: C.text,
-                borderRadius: 10,
-                padding: "7px 10px",
-                fontSize: 12,
-                display: "flex",
-                gap: 8,
-                alignItems: "center",
-              }}
-            >
-              <span>{theme.name}</span>
-              <span style={{ color: C.accent, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>{theme.count}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="chart-grid">
-        <div className="panel">
-          <div className="panel-title">En Riskli Katilimcilar</div>
-          {topParticipants.length ? (
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {topParticipants.map((row) => (
-                <button
-                  type="button"
-                  key={row.participantId}
-                  onClick={() => onParticipantClick(row.participantId)}
-                  className="participant-row"
-                >
-                  <span style={{ color: C.text, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>#{row.participantId}</span>
-                  <span style={{ color: C.textMuted, fontSize: 11 }}>{row.total} yanit</span>
-                  <span style={{ color: C.escalate, fontSize: 11, fontWeight: 700 }}>
-                    {row.escalateCount ? `${row.escalateCount} escalate` : "escalate yok"}
-                  </span>
-                  <span style={{ marginLeft: "auto", color: C.accent, fontWeight: 800, fontSize: 12 }}>
-                    {formatPct(row.avgPriority * 100)}
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="empty-box" style={{ minHeight: 120 }}>
-              Katilimci riski olusturulamadi.
-            </div>
-          )}
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">Veri Kalitesi</div>
-          <div className="quality-grid">
-            <Pill label="Tarih Eksik" value={dataQuality.missingDate} color={C.watch} />
-            <Pill label="Sentiment Belirsiz" value={dataQuality.unknownSentiment} color={C.neutral} />
-            <Pill label="Aksiyon Belirsiz" value={dataQuality.unknownAction} color={C.neutral} />
-            <Pill label="Tema Eksik" value={dataQuality.missingTheme} color={C.watch} />
-            <Pill label="Dusuk Guven (<70%)" value={dataQuality.lowConfidence} color={C.escalate} />
-            <Pill label="Gorunmeyen Kayit" value={dataQuality.hiddenRows} color={C.textDim} />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function InsightsTab({ data, onParticipantClick }) {
   const actionGroups = useMemo(() => {
     const groups = { escalate: [], follow_up: [], watch: [], ignore: [], unknown: [] };
@@ -526,128 +226,6 @@ function InsightsTab({ data, onParticipantClick }) {
           collapsed
         />
       ) : null}
-    </div>
-  );
-}
-
-function MiniBar({ label, value, total, color }) {
-  const pct = total ? Math.round((value / total) * 100) : 0;
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-      <span style={{ width: 54, color: C.textMuted, fontSize: 11, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 5, borderRadius: 3, overflow: "hidden", background: C.border }}>
-        <div style={{ width: `${pct}%`, height: "100%", background: color }} />
-      </div>
-      <span style={{ minWidth: 30, textAlign: "right", color, fontWeight: 700, fontSize: 11 }}>{value}</span>
-    </div>
-  );
-}
-
-function ThemesTab({ stats, filteredData }) {
-  const { topThemes } = stats;
-
-  const themeDetails = useMemo(() => {
-    const map = {};
-    filteredData.forEach((row) => {
-      row.themes.forEach((theme) => {
-        if (!map[theme]) {
-          map[theme] = { positive: 0, neutral: 0, negative: 0, total: 0, scores: [] };
-        }
-        if (row.sentiment === "positive") map[theme].positive += 1;
-        if (row.sentiment === "neutral") map[theme].neutral += 1;
-        if (row.sentiment === "negative") map[theme].negative += 1;
-        map[theme].total += 1;
-        if (row.score > 0) map[theme].scores.push(row.score);
-      });
-    });
-    return map;
-  }, [filteredData]);
-
-  const radarData = topThemes.map((item) => ({ theme: item.name, count: item.count }));
-
-  return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
-      <div className="chart-grid">
-        <div className="panel">
-          <div className="panel-title">Tema Radar</div>
-          <ResponsiveContainer width="100%" height={250}>
-            <RadarChart data={radarData}>
-              <PolarGrid stroke={C.border} />
-              <PolarAngleAxis dataKey="theme" tick={{ fill: C.textMuted, fontSize: 10 }} />
-              <Radar dataKey="count" name="Frekans" fill={C.accent} fillOpacity={0.22} stroke={C.accent} strokeWidth={2} />
-              <Tooltip content={<CustomTooltip />} />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="panel">
-          <div className="panel-title">En Sik Temalar</div>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={topThemes} layout="vertical" margin={{ left: 20, right: 20 }}>
-              <CartesianGrid stroke={C.border} strokeDasharray="3 3" horizontal={false} />
-              <XAxis type="number" tick={{ fill: C.textMuted, fontSize: 11 }} axisLine={false} tickLine={false} />
-              <YAxis
-                type="category"
-                dataKey="name"
-                tick={{ fill: C.textMuted, fontSize: 11 }}
-                axisLine={false}
-                tickLine={false}
-                width={100}
-              />
-              <Tooltip content={<CustomTooltip />} />
-              <Bar dataKey="count" fill={C.accent} radius={[0, 6, 6, 0]} name="Adet" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="theme-grid">
-        {Object.entries(themeDetails)
-          .sort((a, b) => b[1].total - a[1].total)
-          .map(([themeKey, value]) => {
-            const themeName = THEME_LABELS[themeKey] || themeKey;
-            const avgScore = value.scores.length
-              ? value.scores.reduce((sum, score) => sum + score, 0) / value.scores.length
-              : 0;
-            const positiveRate = value.total ? (value.positive / value.total) * 100 : 0;
-
-            return (
-              <article key={themeKey} className="theme-card">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
-                  <div style={{ color: C.text, fontWeight: 700, fontSize: 14 }}>{themeName}</div>
-                  <div style={{ color: C.accent, fontWeight: 800, fontFamily: "'DM Mono', monospace", fontSize: 20 }}>
-                    {value.total}
-                  </div>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
-                  <MiniBar label="Pozitif" value={value.positive} total={value.total} color={C.positive} />
-                  <MiniBar label="Notr" value={value.neutral} total={value.total} color={C.neutral} />
-                  <MiniBar label="Negatif" value={value.negative} total={value.total} color={C.negative} />
-                </div>
-
-                <div
-                  style={{
-                    marginTop: 10,
-                    borderTop: `1px solid ${C.border}`,
-                    paddingTop: 10,
-                    display: "flex",
-                    justifyContent: "space-between",
-                    color: C.textMuted,
-                    fontSize: 11,
-                  }}
-                >
-                  <span>
-                    Ort. Skor: <b style={{ color: C.text }}>{Math.round(avgScore * 100)}%</b>
-                  </span>
-                  <span>
-                    Pozitif: <b style={{ color: C.positive }}>{Math.round(positiveRate)}%</b>
-                  </span>
-                </div>
-              </article>
-            );
-          })}
-      </div>
     </div>
   );
 }
@@ -711,6 +289,14 @@ function ParticipantDrawer({ participantId, rows, onClose }) {
           ))}
         </div>
       </aside>
+    </div>
+  );
+}
+
+function LazyTabFallback() {
+  return (
+    <div className="empty-box" style={{ minHeight: 180 }}>
+      Sekme yukleniyor...
     </div>
   );
 }
@@ -1263,24 +849,30 @@ export default function NeDendy() {
 
       <main className="main-content">
         {activeTab === "overview" ? (
-          <OverviewTab
-            stats={stats}
-            trendData={trendData}
-            trendMode={trendMode}
-            onTrendModeChange={setTrendMode}
-            focusMode={focusMode}
-            onFocusModeChange={setFocusMode}
-            topParticipants={topParticipants}
-            dataQuality={dataQuality}
-            onParticipantClick={(participantId) => setActiveParticipant(participantId)}
-          />
+          <Suspense fallback={<LazyTabFallback />}>
+            <OverviewTab
+              stats={stats}
+              trendData={trendData}
+              trendMode={trendMode}
+              onTrendModeChange={setTrendMode}
+              focusMode={focusMode}
+              onFocusModeChange={setFocusMode}
+              topParticipants={topParticipants}
+              dataQuality={dataQuality}
+              onParticipantClick={(participantId) => setActiveParticipant(participantId)}
+            />
+          </Suspense>
         ) : null}
 
         {activeTab === "insights" ? (
           <InsightsTab data={displayData} onParticipantClick={(participantId) => setActiveParticipant(participantId)} />
         ) : null}
 
-        {activeTab === "themes" ? <ThemesTab stats={stats} filteredData={filteredData} /> : null}
+        {activeTab === "themes" ? (
+          <Suspense fallback={<LazyTabFallback />}>
+            <ThemesTab stats={stats} filteredData={filteredData} />
+          </Suspense>
+        ) : null}
       </main>
 
       <footer className="nd-footer">
