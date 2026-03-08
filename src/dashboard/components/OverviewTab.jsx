@@ -14,6 +14,7 @@ import {
   YAxis,
 } from "recharts";
 import {
+  ACTION_LABELS,
   ACTION_COLORS,
   C,
   FOCUS_MODES,
@@ -34,11 +35,33 @@ export default function OverviewTab({
   topParticipants,
   dataQuality,
   onParticipantClick,
+  onGoToInsights,
+  onGoToThemes,
+  onGoToEscalate,
+  escalateHighlights,
 }) {
   const { total, avgScore, avgPriority, sentCounts, actionCounts, topThemes, urgentCount, riskScore, sentPie, actionBar } = stats;
+  const topEscalate = escalateHighlights[0] || null;
+  const withRate = (count) => `${count} (${total ? Math.round((count / total) * 100) : 0}%)`;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div className="panel" style={{ padding: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, flexWrap: "wrap" }}>
+          <div>
+            <div className="panel-title" style={{ marginBottom: 4 }}>
+              Bu sayfa ne gosteriyor?
+            </div>
+            <div style={{ color: C.textMuted, fontSize: 12 }}>
+              Genel Bakis; risk, aksiyon dagilimi, trend ve veri kalitesini tek ekranda toplar.
+            </div>
+          </div>
+          <button type="button" className="ghost-btn" onClick={onGoToInsights}>
+            Icgorulere Git
+          </button>
+        </div>
+      </div>
+
       <div className="panel" style={{ padding: 14 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           <span style={{ color: C.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: "0.04em", textTransform: "uppercase" }}>
@@ -229,14 +252,36 @@ export default function OverviewTab({
               {actionCounts.escalate} kayit escalate durumunda
             </div>
             <div style={{ color: C.textMuted, fontSize: 12, marginTop: 3 }}>
-              Bu kayitlar hizli inceleme gerektiriyor. Icgoruler sekmesinden katilimci detayina gec.
+              Escalate, acil insan kontrolu gereken kayit anlamina gelir.
+            </div>
+            {topEscalate ? (
+              <div style={{ color: C.textMuted, fontSize: 12, marginTop: 6 }}>
+                En kritik kayit: #{topEscalate.participant_id} / Q{topEscalate.question_id} - {topEscalate.display_label || topEscalate.summary || "etiketsiz"}
+              </div>
+            ) : null}
+            <div style={{ display: "flex", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+              <button type="button" className="ghost-btn" onClick={onGoToEscalate}>
+                Escalate Listesini Ac
+              </button>
+              {topEscalate ? (
+                <button type="button" className="ghost-btn" onClick={() => onParticipantClick(topEscalate.participant_id)}>
+                  Katilimci #{topEscalate.participant_id}
+                </button>
+              ) : null}
             </div>
           </div>
         </div>
       ) : null}
 
       <div className="panel">
-        <div className="panel-title">On Plana Cikan Temalar</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+          <div className="panel-title" style={{ marginBottom: 0 }}>
+            On Plana Cikan Temalar
+          </div>
+          <button type="button" className="ghost-btn" onClick={onGoToThemes}>
+            Tum Temalari Incele
+          </button>
+        </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {topThemes.slice(0, 8).map((theme) => (
             <div
@@ -263,6 +308,9 @@ export default function OverviewTab({
       <div className="chart-grid">
         <div className="panel">
           <div className="panel-title">En Riskli Katilimcilar</div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 10 }}>
+            Oncelik skoruna gore en riskli katilimci listesi. Satira tiklayinca tum cevaplari acilir.
+          </div>
           {topParticipants.length ? (
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
               {topParticipants.map((row) => (
@@ -275,7 +323,7 @@ export default function OverviewTab({
                   <span style={{ color: C.text, fontFamily: "'DM Mono', monospace", fontWeight: 700 }}>#{row.participantId}</span>
                   <span style={{ color: C.textMuted, fontSize: 11 }}>{row.total} yanit</span>
                   <span style={{ color: C.escalate, fontSize: 11, fontWeight: 700 }}>
-                    {row.escalateCount ? `${row.escalateCount} escalate` : "escalate yok"}
+                    {row.escalateCount ? `${row.escalateCount} ${ACTION_LABELS.escalate}` : "escalate yok"}
                   </span>
                   <span style={{ marginLeft: "auto", color: C.accent, fontWeight: 800, fontSize: 12 }}>
                     {formatPct(row.avgPriority * 100)}
@@ -292,13 +340,16 @@ export default function OverviewTab({
 
         <div className="panel">
           <div className="panel-title">Veri Kalitesi</div>
+          <div style={{ color: C.textMuted, fontSize: 12, marginBottom: 10 }}>
+            Bu panel, etiketleme kalitesini izlemek icin kullanilir. Yuzde ve adetler filtreye gore degisir.
+          </div>
           <div className="quality-grid">
-            <Pill label="Tarih Eksik" value={dataQuality.missingDate} color={C.watch} />
-            <Pill label="Sentiment Belirsiz" value={dataQuality.unknownSentiment} color={C.neutral} />
-            <Pill label="Aksiyon Belirsiz" value={dataQuality.unknownAction} color={C.neutral} />
-            <Pill label="Tema Eksik" value={dataQuality.missingTheme} color={C.watch} />
-            <Pill label="Dusuk Guven (<70%)" value={dataQuality.lowConfidence} color={C.escalate} />
-            <Pill label="Gorunmeyen Kayit" value={dataQuality.hiddenRows} color={C.textDim} />
+            <Pill label="Tarih Eksik" value={withRate(dataQuality.missingDate)} color={C.watch} />
+            <Pill label="Sentiment Belirsiz" value={withRate(dataQuality.unknownSentiment)} color={C.neutral} />
+            <Pill label="Aksiyon Belirsiz" value={withRate(dataQuality.unknownAction)} color={C.neutral} />
+            <Pill label="Tema Eksik" value={withRate(dataQuality.missingTheme)} color={C.watch} />
+            <Pill label="Dusuk Guven (<70%)" value={withRate(dataQuality.lowConfidence)} color={C.escalate} />
+            <Pill label="Gorunmeyen Kayit" value={withRate(dataQuality.hiddenRows)} color={C.textDim} />
           </div>
         </div>
       </div>
