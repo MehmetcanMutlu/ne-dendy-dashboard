@@ -16,6 +16,7 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 - Recharts: React ile dogrudan uyumlu; ozellikle dashboard chart setleri hizli gelistiriliyor.
 - CSS variables + token yapisi: dark/light tema ve tasarim tutarliligini tek merkezden yonetiyor.
 - Moduler yapi: `src/dashboard/config.js`, `src/dashboard/utils.js`, `src/dashboard/primitives.jsx` ile sorumluluklar ayrildi.
+- Performans: chart tablari lazy-load edilerek ilk yukleme maliyeti dusuruldu.
 
 ## Özellikler
 - `survey_id` bazlı anket filtreleme
@@ -48,8 +49,12 @@ Dendy.ai ürününün **"Ne Dendy?"** modülü için geliştirilen yönetici oda
 │   ├── App.jsx
 │   ├── NeDendy.jsx
 │   ├── dashboard/
+│   │   ├── components/
+│   │   │   ├── OverviewTab.jsx
+│   │   │   └── ThemesTab.jsx
 │   │   ├── config.js
 │   │   ├── primitives.jsx
+│   │   ├── utils.test.js
 │   │   └── utils.js
 │   ├── index.css
 │   └── main.jsx
@@ -67,6 +72,7 @@ npm run dev
 ## Build ve Kontrol
 ```bash
 npm run lint
+npm run test
 npm run build
 npm run preview
 ```
@@ -77,7 +83,8 @@ GitHub Actions pipeline'i eklendi: [`.github/workflows/ci.yml`](./.github/workfl
 Calistirdigi adimlar:
 1. `npm ci`
 2. `npm run lint`
-3. `npm run build`
+3. `npm run test`
+4. `npm run build`
 
 Trigger:
 - `push` (`main` ve `feature/**`)
