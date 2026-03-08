@@ -49,9 +49,28 @@ export default function ThemesTab({ stats, filteredData }) {
   }, [filteredData]);
 
   const radarData = topThemes.map((item) => ({ theme: item.name, count: item.count }));
+  const hasThemes = topThemes.length > 0;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+      <div className="panel" style={{ padding: 14 }}>
+        <div className="panel-title" style={{ marginBottom: 4 }}>
+          Temalar neyi gosterir?
+        </div>
+        <div style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.55 }}>
+          Temalar, katilimci metninden cikarilan konu etiketleridir. Burada hangi konunun ne siklikta gectigi ve
+          ilgili konuda pozitif/notr/negatif dagilim gorulur.
+        </div>
+      </div>
+
+      {!hasThemes ? (
+        <div className="empty-box" style={{ minHeight: 180 }}>
+          Secili filtrelerde tema verisi bulunamadi.
+        </div>
+      ) : null}
+
+      {hasThemes ? (
+        <>
       <div className="chart-grid">
         <div className="panel">
           <div className="panel-title">Tema Radar</div>
@@ -133,6 +152,8 @@ export default function ThemesTab({ stats, filteredData }) {
             );
           })}
       </div>
+        </>
+      ) : null}
     </div>
   );
 }
