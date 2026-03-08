@@ -169,7 +169,7 @@ function Section({ title, subtitle, color, items, onParticipantClick, collapsed 
   );
 }
 
-function InsightsTab({ data, onParticipantClick }) {
+function InsightsTab({ data, stats, onParticipantClick }) {
   const actionGroups = useMemo(() => {
     const groups = { escalate: [], follow_up: [], watch: [], ignore: [], unknown: [] };
     data.forEach((item) => {
@@ -189,6 +189,21 @@ function InsightsTab({ data, onParticipantClick }) {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 28 }}>
+      <div className="panel" style={{ padding: 14 }}>
+        <div className="panel-title" style={{ marginBottom: 4 }}>
+          Icgoruler neyi gosterir?
+        </div>
+        <div style={{ color: C.textMuted, fontSize: 12, lineHeight: 1.55 }}>
+          Icgoruler, metinlerden otomatik cikarilan aksiyon kayitlaridir. Kartlar oncelik skoruna gore siralanir ve
+          karttaki katilimci butonundan tum cevaplari acabilirsin.
+        </div>
+        <div style={{ marginTop: 10, display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <Badge color={C.escalate}>Escalate: {stats.actionCounts.escalate || 0}</Badge>
+          <Badge color={C.followUp}>Follow Up: {stats.actionCounts.follow_up || 0}</Badge>
+          <Badge color={C.watch}>Watch: {stats.actionCounts.watch || 0}</Badge>
+        </div>
+      </div>
+
       {actionGroups.escalate.length ? (
         <Section
           title="🔴 Escalate"
@@ -322,6 +337,12 @@ export default function NeDendy() {
 
   const [trendMode, setTrendMode] = useState("daily");
   const [activeParticipant, setActiveParticipant] = useState(null);
+
+  const tabDescriptions = {
+    overview: "Genel Bakis: KPI, risk, trend ve veri kalitesini tek noktada izlersin.",
+    insights: "Icgoruler: aksiyon gerektiren kayitlari oncelik skoruna gore inceleyip katilimciya inersin.",
+    themes: "Temalar: metinlerde en cok gecen konu etiketlerini ve sentiment dagilimini gorursun.",
+  };
 
   useEffect(() => {
     localStorage.setItem("ne-dendy-theme", theme);
@@ -601,6 +622,13 @@ export default function NeDendy() {
       .slice(0, 8);
   }, [filteredData]);
 
+  const escalateHighlights = useMemo(() => {
+    return filteredData
+      .filter((row) => row.action === "escalate")
+      .sort((a, b) => b.priorityScore - a.priorityScore)
+      .slice(0, 3);
+  }, [filteredData]);
+
   const dataQuality = useMemo(() => {
     let missingDate = 0;
     let unknownSentiment = 0;
@@ -847,6 +875,11 @@ export default function NeDendy() {
         <div style={{ marginLeft: "auto", color: C.textMuted, fontSize: 12 }}>{filteredData.length} sonuc</div>
       </div>
 
+      <div className="tab-context">
+        <span className="tab-context-dot" />
+        <span>{tabDescriptions[activeTab]}</span>
+      </div>
+
       <main className="main-content">
         {activeTab === "overview" ? (
           <Suspense fallback={<LazyTabFallback />}>
@@ -860,12 +893,23 @@ export default function NeDendy() {
               topParticipants={topParticipants}
               dataQuality={dataQuality}
               onParticipantClick={(participantId) => setActiveParticipant(participantId)}
+              onGoToInsights={() => setActiveTab("insights")}
+              onGoToThemes={() => setActiveTab("themes")}
+              onGoToEscalate={() => {
+                setActionFilter("escalate");
+                setActiveTab("insights");
+              }}
+              escalateHighlights={escalateHighlights}
             />
           </Suspense>
         ) : null}
 
         {activeTab === "insights" ? (
-          <InsightsTab data={displayData} onParticipantClick={(participantId) => setActiveParticipant(participantId)} />
+          <InsightsTab
+            data={displayData}
+            stats={stats}
+            onParticipantClick={(participantId) => setActiveParticipant(participantId)}
+          />
         ) : null}
 
         {activeTab === "themes" ? (
@@ -1044,6 +1088,25 @@ function DashboardStyle() {
         padding: 0 24px;
         background: var(--surface);
         overflow-x: auto;
+      }
+
+      .tab-context {
+        border-bottom: 1px solid var(--border);
+        padding: 10px 24px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: var(--muted);
+        font-size: 12px;
+        background: var(--surface-alt);
+      }
+
+      .tab-context-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 999px;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent-glow);
       }
 
       .tab-btn {
@@ -1288,6 +1351,10 @@ function DashboardStyle() {
 
         .tabs-row {
           padding: 0 14px;
+        }
+
+        .tab-context {
+          padding: 10px 14px;
         }
 
         .tab-btn {
